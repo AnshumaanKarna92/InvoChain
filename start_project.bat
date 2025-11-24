@@ -1,0 +1,16 @@
+@echo off
+echo Starting InvoChain...
+
+echo Starting Invoice Service...
+start "Invoice Service" cmd /k "cd services/invoice-service && npm run dev"
+
+echo Starting Blockchain Service...
+start "Blockchain Service" cmd /k "cd services/blockchain-service && npm run dev"
+
+echo Starting API Gateway...
+start "API Gateway" cmd /k "cd services/api-gateway && npm run dev"
+
+echo Starting Frontend...
+start "Frontend" cmd /k "cd apps/web && npm run dev"
+
+echo All services started!

@@ -1,0 +1,12 @@
+{
+    "name": "invo-chain-root",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "dev": "concurrently \"npm run dev --prefix services/api-gateway\" \"npm run dev --prefix services/blockchain-service\" \"npm run dev --prefix apps/web\"",
+        "install:all": "npm install && npm install --prefix apps/web && npm install --prefix services/api-gateway && npm install --prefix services/blockchain-service"
+    },
+    "devDependencies": {
+        "concurrently": "^9.1.0"
+    }
+}

@@ -1,0 +1,44 @@
+name: InvoChain CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+
+    # --- Install Dependencies & Test Services ---
+    
+    - name: Install API Gateway Dependencies
+      run: cd services/api-gateway && npm install
+
+    - name: Install Invoice Service Dependencies
+      run: cd services/invoice-service && npm install
+
+    - name: Install Frontend Dependencies
+      run: cd apps/web && npm install
+
+    # --- Linting & Building ---
+
+    - name: Build Frontend
+      run: cd apps/web && npm run build
+
+    # --- Docker Compose Verification ---
+    
+    - name: Verify Docker Compose Config
+      run: docker-compose config

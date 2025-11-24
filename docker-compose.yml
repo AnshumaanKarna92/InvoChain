@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # --- Infrastructure ---
+  api-gateway:
+    build: ./services/api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - INVOICE_SERVICE_URL=http://invoice-service:3002
+      - BLOCKCHAIN_SERVICE_URL=http://blockchain-service:3003
+      - BUYER_ACTION_SERVICE_URL=http://buyer-action-service:3004
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3005
+      - RECONCILIATION_SERVICE_URL=http://reconciliation-service:3006
+      - CREDIT_DEBIT_NOTE_SERVICE_URL=http://credit-debit-note-service:3007
+      - GST_RETURN_SERVICE_URL=http://gst-return-service:3008
+      - GST_ADAPTER_SERVICE_URL=http://gst-adapter-service:3009
+      - PAYMENT_SERVICE_URL=http://payment-service:3010
+    depends_on:
+      - invoice-service
+      - blockchain-service
+
+  # --- Microservices ---
+  auth-service:
+    build: ./services/auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+
+  invoice-service:
+    build: ./services/invoice-service
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+    volumes:
+      - ./services/storage:/app/storage
+
+  blockchain-service:
+    build: ./services/blockchain-service
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+
+  buyer-action-service:
+    build: ./services/buyer-action-service
+    ports:
+      - "3004:3004"
+    environment:
+      - PORT=3004
+
+  notification-service:
+    build: ./services/notification-service
+    ports:
+      - "3005:3005"
+    environment:
+      - PORT=3005
+
+  reconciliation-service:
+    build: ./services/reconciliation-service
+    ports:
+      - "3006:3006"
+    environment:
+      - PORT=3006
+
+  credit-debit-note-service:
+    build: ./services/credit-debit-note-service
+    ports:
+      - "3007:3007"
+    environment:
+      - PORT=3007
+
+  gst-return-service:
+    build: ./services/gst-return-service
+    ports:
+      - "3008:3008"
+    environment:
+      - PORT=3008
+
+  gst-adapter-service:
+    build: ./services/gst-adapter-service
+    ports:
+      - "3009:3009"
+    environment:
+      - PORT=3009
+
+  payment-service:
+    build: ./services/payment-service
+    ports:
+      - "3010:3010"
+    environment:
+      - PORT=3010
+
+  # --- Frontend ---
+  web:
+    build: ./apps/web
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3000/api
+    depends_on:
+      - api-gateway
+
+  # --- Database (Optional for now as services use in-memory/file) ---
+  postgres:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=invochain
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
