@@ -3,8 +3,8 @@
     "version": "1.0.0",
     "private": true,
     "scripts": {
-        "dev": "concurrently \"npm run dev --prefix services/api-gateway\" \"npm run dev --prefix services/blockchain-service\" \"npm run dev --prefix apps/web\"",
-        "install:all": "npm install && npm install --prefix apps/web && npm install --prefix services/api-gateway && npm install --prefix services/blockchain-service"
+        "dev": "concurrently \"npm run dev --prefix services/api-gateway\" \"npm run dev --prefix services/blockchain-service\" \"npm run dev --prefix services/invoice-service\" \"npm run dev --prefix services/payment-service\" \"npm run dev --prefix services/reconciliation-service\" \"npm run dev --prefix services/credit-debit-note-service\" \"npm run dev --prefix services/gst-return-service\" \"npm run dev --prefix services/gst-adapter-service\" \"npm run dev --prefix apps/web\"",
+        "install:all": "npm install && npm install --prefix apps/web && npm install --prefix services/api-gateway && npm install --prefix services/blockchain-service && npm install --prefix services/invoice-service && npm install --prefix services/payment-service && npm install --prefix services/reconciliation-service && npm install --prefix services/credit-debit-note-service && npm install --prefix services/gst-return-service && npm install --prefix services/gst-adapter-service"
     },
     "devDependencies": {
         "concurrently": "^9.1.0"

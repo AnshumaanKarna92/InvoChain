@@ -236,6 +236,22 @@ app.patch('/gst/returns/:id/status', (req, res) => {
     });
 });
 
+// Delete Return
+app.delete('/gst/returns/:id', (req, res) => {
+    const index = gstReturns.findIndex(r => r.id === req.params.id);
+
+    if (index === -1) {
+        return res.status(404).json({ success: false, message: 'Return not found' });
+    }
+
+    gstReturns.splice(index, 1);
+
+    res.json({
+        success: true,
+        message: 'Return deleted successfully'
+    });
+});
+
 app.listen(PORT, () => {
     console.log(`GST Return Service running on port ${PORT}`);
 });

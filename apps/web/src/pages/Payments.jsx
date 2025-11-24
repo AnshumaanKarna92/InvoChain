@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { paymentService, invoiceService } from '../services/api';
+import { useDarkMode } from '../App';
 
 export default function Payments() {
+    const { darkMode } = useDarkMode();
     const [payments, setPayments] = useState([]); // In a real app, we might list recent payments
     const [invoices, setInvoices] = useState([]);
     const [showCreateForm, setShowCreateForm] = useState(false);
@@ -65,7 +67,7 @@ export default function Payments() {
     return (
         <div className="px-4 py-6 sm:px-0">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-gray-900">Payments</h1>
+                <h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Payments</h1>
                 <button
                     onClick={() => setShowCreateForm(!showCreateForm)}
                     className="bg-indigo-600 px-4 py-2 rounded-md text-white text-sm font-medium hover:bg-indigo-700"
@@ -77,34 +79,34 @@ export default function Payments() {
             {/* Analytics Cards */}
             {analytics && (
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mb-8">
-                    <div className="bg-white overflow-hidden shadow rounded-lg p-5">
-                        <dt className="text-sm font-medium text-gray-500 truncate">Total Collected</dt>
+                    <div className={`${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} overflow-hidden shadow rounded-lg p-5 border`}>
+                        <dt className={`text-sm font-medium ${darkMode ? 'text-slate-400' : 'text-gray-500'} truncate`}>Total Collected</dt>
                         <dd className="text-2xl font-semibold text-green-600">₹{analytics.total_collected.toLocaleString()}</dd>
                     </div>
-                    <div className="bg-white overflow-hidden shadow rounded-lg p-5">
-                        <dt className="text-sm font-medium text-gray-500 truncate">Outstanding Receivables</dt>
+                    <div className={`${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} overflow-hidden shadow rounded-lg p-5 border`}>
+                        <dt className={`text-sm font-medium ${darkMode ? 'text-slate-400' : 'text-gray-500'} truncate`}>Outstanding Receivables</dt>
                         <dd className="text-2xl font-semibold text-red-600">₹{analytics.outstanding.toLocaleString()}</dd>
                     </div>
-                    <div className="bg-white overflow-hidden shadow rounded-lg p-5">
-                        <dt className="text-sm font-medium text-gray-500 truncate">Transactions</dt>
-                        <dd className="text-2xl font-semibold text-gray-900">{analytics.transaction_count}</dd>
+                    <div className={`${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} overflow-hidden shadow rounded-lg p-5 border`}>
+                        <dt className={`text-sm font-medium ${darkMode ? 'text-slate-400' : 'text-gray-500'} truncate`}>Transactions</dt>
+                        <dd className={`text-2xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{analytics.transaction_count}</dd>
                     </div>
                 </div>
             )}
 
             {showCreateForm && (
-                <div className="bg-white shadow sm:rounded-lg mb-6">
+                <div className={`${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} shadow sm:rounded-lg mb-6 border`}>
                     <div className="px-4 py-5 sm:p-6">
-                        <h2 className="text-lg font-medium text-gray-900 mb-4">Record New Payment</h2>
+                        <h2 className={`text-lg font-medium ${darkMode ? 'text-white' : 'text-gray-900'} mb-4`}>Record New Payment</h2>
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700">Invoice</label>
+                                    <label className={`block text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-gray-700'}`}>Invoice</label>
                                     <select
                                         required
                                         value={formData.invoice_id}
                                         onChange={(e) => setFormData({ ...formData, invoice_id: e.target.value })}
-                                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                        className={`mt-1 block w-full rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'border-gray-300'}`}
                                     >
                                         <option value="">Select Invoice</option>
                                         {invoices.map(inv => (
@@ -113,22 +115,22 @@ export default function Payments() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700">Amount</label>
+                                    <label className={`block text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-gray-700'}`}>Amount</label>
                                     <input
                                         type="number"
                                         step="0.01"
                                         required
                                         value={formData.amount}
                                         onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                        className={`mt-1 block w-full rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'border-gray-300'}`}
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700">Payment Method</label>
+                                    <label className={`block text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-gray-700'}`}>Payment Method</label>
                                     <select
                                         value={formData.method}
                                         onChange={(e) => setFormData({ ...formData, method: e.target.value })}
-                                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                        className={`mt-1 block w-full rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-slate-700 border-slate-600 text-white' : 'border-gray-300'}`}
                                     >
                                         <option value="BANK_TRANSFER">Bank Transfer</option>
                                         <option value="UPI">UPI</option>
@@ -137,21 +139,21 @@ export default function Payments() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700">Reference ID</label>
+                                    <label className={`block text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-gray-700'}`}>Reference ID</label>
                                     <input
                                         type="text"
                                         value={formData.reference_id}
                                         onChange={(e) => setFormData({ ...formData, reference_id: e.target.value })}
-                                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                        className={`mt-1 block w-full rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'border-gray-300'}`}
                                     />
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700">Notes</label>
+                                    <label className={`block text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-gray-700'}`}>Notes</label>
                                     <textarea
                                         rows={3}
                                         value={formData.notes}
                                         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                        className={`mt-1 block w-full rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'border-gray-300'}`}
                                     />
                                 </div>
                             </div>

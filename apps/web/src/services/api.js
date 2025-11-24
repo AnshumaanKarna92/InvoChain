@@ -63,6 +63,7 @@ export const gstReturnService = {
     getReturn: (id) => api.get(`/gst/returns/${id}`),
     getReturns: (type) => api.get('/gst/returns', { params: { type } }),
     updateReturnStatus: (id, status) => api.patch(`/gst/returns/${id}/status`, { status }),
+    deleteReturn: (id) => api.delete(`/gst/returns/${id}`),
 };
 
 // GST Adapter Service

@@ -57,9 +57,8 @@ const proxyOptions = (target, pathRewrite) => ({
 
 // Invoice route - must come first and handle multipart form data
 app.use('/api/invoices', createProxyMiddleware({
-    target: INVOICE_SERVICE,
+    target: INVOICE_SERVICE + '/invoices',
     changeOrigin: true,
-    pathRewrite: (path, req) => path.replace(/^\/api/, ''),
     onError: (err, req, res) => {
         console.error('Proxy Error (Invoice):', err);
         res.status(500).json({ message: 'Proxy Error', error: err.message });
@@ -67,51 +66,43 @@ app.use('/api/invoices', createProxyMiddleware({
 }));
 
 app.use('/api/blockchain', createProxyMiddleware({
-    target: BLOCKCHAIN_SERVICE,
+    target: BLOCKCHAIN_SERVICE + '/blockchain',
     changeOrigin: true,
-    pathRewrite: (path, req) => path.replace(/^\/api/, ''),
 }));
 
 app.use('/api/buyer', createProxyMiddleware({
-    target: BUYER_ACTION_SERVICE,
+    target: BUYER_ACTION_SERVICE + '/buyer',
     changeOrigin: true,
-    pathRewrite: (path, req) => path.replace(/^\/api/, ''),
 }));
 
 app.use('/api/notifications', createProxyMiddleware({
-    target: NOTIFICATION_SERVICE,
+    target: NOTIFICATION_SERVICE + '/notifications',
     changeOrigin: true,
-    pathRewrite: (path, req) => path.replace(/^\/api/, ''),
 }));
 
 app.use('/api/reconciliation', createProxyMiddleware({
-    target: RECONCILIATION_SERVICE,
+    target: RECONCILIATION_SERVICE + '/reconciliation',
     changeOrigin: true,
-    pathRewrite: (path, req) => path.replace(/^\/api/, ''),
 }));
 
 app.use('/api/notes', createProxyMiddleware({
-    target: CREDIT_DEBIT_NOTE_SERVICE,
+    target: CREDIT_DEBIT_NOTE_SERVICE + '/notes',
     changeOrigin: true,
-    pathRewrite: (path, req) => path.replace(/^\/api/, ''),
 }));
 
 app.use('/api/gst', createProxyMiddleware({
-    target: GST_RETURN_SERVICE,
+    target: GST_RETURN_SERVICE + '/gst',
     changeOrigin: true,
-    pathRewrite: (path, req) => path.replace(/^\/api/, ''),
 }));
 
 app.use('/api/gst-adapter', createProxyMiddleware({
-    target: GST_ADAPTER_SERVICE,
+    target: GST_ADAPTER_SERVICE + '/gst-adapter',
     changeOrigin: true,
-    pathRewrite: (path, req) => path.replace(/^\/api/, ''),
 }));
 
 app.use('/api/payments', createProxyMiddleware({
-    target: PAYMENT_SERVICE,
+    target: PAYMENT_SERVICE + '/payments',
     changeOrigin: true,
-    pathRewrite: (path, req) => path.replace(/^\/api/, ''),
 }));
 
 app.listen(PORT, () => {
