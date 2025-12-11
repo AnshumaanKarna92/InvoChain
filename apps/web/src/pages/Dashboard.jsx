@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { invoiceService, reconciliationService, paymentService } from '../services/api';
-import { useDarkMode } from '../App';
+import { useDarkMode, useAuth } from '../App';
 
 export default function Dashboard() {
     const { darkMode } = useDarkMode();
+    const { user } = useAuth();
     const [stats, setStats] = useState({
         totalInvoices: 0,
         reconciled: 0,
@@ -15,13 +16,15 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetchDashboardData();
-    }, []);
+        if (user?.merchant_id) {
+            fetchDashboardData();
+        }
+    }, [user]);
 
     const fetchDashboardData = async () => {
         try {
             const [invoicesRes, discrepanciesRes, analyticsRes] = await Promise.all([
-                invoiceService.getInvoices(),
+                invoiceService.getInvoices(user.merchant_id),
                 reconciliationService.getDiscrepancies(),
                 paymentService.getAnalytics().catch(() => ({ data: { total_collected: 0 } })),
             ]);
@@ -30,12 +33,14 @@ export default function Dashboard() {
             const discrepancies = discrepanciesRes.data.discrepancies || [];
             const analytics = analyticsRes.data || { total_collected: 0 };
 
+            console.log('Dashboard invoices:', invoices); // Debug log
+
             setStats({
                 totalInvoices: invoices.length,
-                reconciled: invoices.filter(inv => inv.status === 'RECONCILED').length,
-                pending: invoices.filter(inv => inv.status === 'PENDING').length,
+                reconciled: invoices.filter(inv => inv.status === 'ACCEPTED').length, // Changed from RECONCILED
+                pending: invoices.filter(inv => inv.status === 'ISSUED').length, // Changed from PENDING
                 discrepancies: discrepancies.length,
-                collected: analytics.total_collected,
+                collected: analytics.total_collected || 0,
             });
 
             // Process recent activity from invoices
@@ -170,8 +175,8 @@ export default function Dashboard() {
                                         <div className="flex items-center space-x-4">
                                             <div className="flex-shrink-0">
                                                 <div className={`h-10 w-10 rounded-full flex items-center justify-center ${invoice.status === 'PAID' ? 'bg-green-100 text-green-600' :
-                                                        invoice.status === 'PENDING' ? 'bg-amber-100 text-amber-600' :
-                                                            'bg-slate-100 text-slate-600'
+                                                    invoice.status === 'PENDING' ? 'bg-amber-100 text-amber-600' :
+                                                        'bg-slate-100 text-slate-600'
                                                     }`}>
                                                     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -183,7 +188,7 @@ export default function Dashboard() {
                                                     Invoice #{invoice.invoice_number} Created
                                                 </p>
                                                 <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'} truncate`}>
-                                                    To: {invoice.buyer_id}
+                                                    To: {invoice.buyer_gstin || invoice.buyer_id}
                                                 </p>
                                             </div>
                                             <div className="inline-flex items-center text-base font-semibold text-slate-900 dark:text-white">

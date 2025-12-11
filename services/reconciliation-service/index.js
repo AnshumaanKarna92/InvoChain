@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const { v4: uuidv4 } = require('uuid');
+const { Pool } = require('pg');
 require('dotenv').config();
 
 const app = express();
@@ -11,163 +12,164 @@ app.use(cors());
 app.use(helmet());
 app.use(express.json());
 
-// In-memory storage
-const reconciliationReports = [];
-const discrepancies = [];
-
-// Mock invoice data (in real app, fetch from Invoice Service)
-let mockIssuedInvoices = [];
-let mockReceivedInvoices = [];
+// Database Connection
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL || 'postgresql://admin:password@localhost:5433/invochain',
+});
 
 app.get('/health', (req, res) => {
     res.json({ status: 'UP', service: 'Reconciliation Service' });
 });
 
-// Helper: Match invoices
-function matchInvoices(issuedInvoices, receivedInvoices) {
-    const matched = [];
-    const unmatched = [];
-    const discrepanciesList = [];
-
-    issuedInvoices.forEach(issued => {
-        const received = receivedInvoices.find(r =>
-            r.invoice_number === issued.invoice_number &&
-            r.seller_id === issued.seller_id &&
-            r.buyer_id === issued.buyer_id
-        );
-
-        if (!received) {
-            discrepanciesList.push({
-                id: uuidv4(),
-                invoice_id: issued.id,
-                discrepancy_type: 'MISSING',
-                description: `Invoice ${issued.invoice_number} issued but not received by buyer`,
-                resolved: false
-            });
-            unmatched.push(issued);
-        } else {
-            // Check for amount mismatch
-            if (Math.abs(issued.total_amount - received.total_amount) > 0.01) {
-                discrepanciesList.push({
-                    id: uuidv4(),
-                    invoice_id: issued.id,
-                    discrepancy_type: 'AMOUNT_MISMATCH',
-                    description: `Amount mismatch: Issued ${issued.total_amount}, Received ${received.total_amount}`,
-                    resolved: false
-                });
-            }
-
-            // Check for date mismatch
-            if (issued.invoice_date !== received.invoice_date) {
-                discrepanciesList.push({
-                    id: uuidv4(),
-                    invoice_id: issued.id,
-                    discrepancy_type: 'DATE_MISMATCH',
-                    description: `Date mismatch: Issued ${issued.invoice_date}, Received ${received.invoice_date}`,
-                    resolved: false
-                });
-            }
-
-            matched.push({ issued, received });
-        }
-    });
-
-    return { matched, unmatched, discrepancies: discrepanciesList };
-}
-
 // Run Reconciliation
-app.post('/reconciliation/run', (req, res) => {
+app.post('/reconciliation/run', async (req, res) => {
+    const client = await pool.connect();
     try {
-        const { period_start, period_end, issued_invoices, received_invoices } = req.body;
+        await client.query('BEGIN');
+        const { period_start, period_end } = req.body;
 
-        // Store mock data (in real app, fetch from database)
-        mockIssuedInvoices = issued_invoices || [];
-        mockReceivedInvoices = received_invoices || [];
+        // Fetch all invoices for the period (Mocking "Issued" vs "Received" by just using the same table for now)
+        // In a real scenario, "Received" would come from GSTR-2A API or Buyer's upload.
+        // Here we simulate that "System Invoices" are "Issued" and we check if they are "Accepted" by buyer.
 
-        const result = matchInvoices(mockIssuedInvoices, mockReceivedInvoices);
+        const invoicesRes = await client.query('SELECT * FROM invoices');
+        const invoices = invoicesRes.rows;
 
         const reportId = uuidv4();
+        let matchedCount = 0;
+        let discrepanciesCount = 0;
+
+        for (const invoice of invoices) {
+            // Logic: If status is ISSUED but not ACCEPTED after due date, flag it?
+            // Or simple check: Does every invoice have a valid buyer?
+
+            if (!invoice.buyer_gstin) {
+                await client.query(
+                    'INSERT INTO discrepancies (id, report_id, invoice_id, invoice_number, type, details, status) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                    [uuidv4(), reportId, invoice.id, invoice.invoice_number, 'MISSING_BUYER', 'Buyer GSTIN missing', 'OPEN']
+                );
+                discrepanciesCount++;
+            } else if (invoice.status === 'REJECTED') {
+                await client.query(
+                    'INSERT INTO discrepancies (id, report_id, invoice_id, invoice_number, type, details, status) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                    [uuidv4(), reportId, invoice.id, invoice.invoice_number, 'REJECTED_INVOICE', 'Invoice rejected by buyer', 'OPEN']
+                );
+                discrepanciesCount++;
+            } else {
+                matchedCount++;
+            }
+        }
+
+        await client.query(
+            'INSERT INTO reconciliation_reports (id, period_start, period_end, total_invoices, matched_invoices, discrepancies_count, status) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+            [reportId, period_start || null, period_end || null, invoices.length, matchedCount, discrepanciesCount, 'COMPLETED']
+        );
+
+        await client.query('COMMIT');
+
         const report = {
             id: reportId,
-            period_start,
-            period_end,
-            total_invoices: mockIssuedInvoices.length,
-            matched_invoices: result.matched.length,
-            discrepancies_count: result.discrepancies.length,
-            status: 'COMPLETED',
-            created_at: new Date().toISOString()
+            total_invoices: invoices.length,
+            matched_invoices: matchedCount,
+            discrepancies_count: discrepanciesCount,
+            status: 'COMPLETED'
         };
-
-        reconciliationReports.push(report);
-
-        // Store discrepancies
-        result.discrepancies.forEach(d => {
-            d.report_id = reportId;
-            discrepancies.push(d);
-        });
 
         res.json({
             success: true,
             report,
-            matched: result.matched.length,
-            unmatched: result.unmatched.length,
-            discrepancies: result.discrepancies.length,
             message: 'Reconciliation completed'
         });
+
     } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error running reconciliation:', error);
         res.status(500).json({ success: false, error: error.message });
+    } finally {
+        client.release();
     }
 });
 
 // Get Reconciliation Report
-app.get('/reconciliation/report/:id', (req, res) => {
-    const report = reconciliationReports.find(r => r.id === req.params.id);
-    if (!report) {
-        return res.status(404).json({ success: false, message: 'Report not found' });
+app.get('/reconciliation/report/:id', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const reportRes = await client.query('SELECT * FROM reconciliation_reports WHERE id = $1', [req.params.id]);
+        if (reportRes.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Report not found' });
+        }
+
+        const discrepanciesRes = await client.query('SELECT * FROM discrepancies WHERE report_id = $1', [req.params.id]);
+
+        res.json({
+            success: true,
+            report: reportRes.rows[0],
+            discrepancies: discrepanciesRes.rows
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        client.release();
     }
-
-    const reportDiscrepancies = discrepancies.filter(d => d.report_id === req.params.id);
-
-    res.json({
-        success: true,
-        report,
-        discrepancies: reportDiscrepancies
-    });
 });
 
 // Get All Discrepancies
-app.get('/reconciliation/discrepancies', (req, res) => {
-    res.json({
-        success: true,
-        discrepancies,
-        count: discrepancies.length
-    });
+app.get('/reconciliation/discrepancies', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const result = await client.query('SELECT * FROM discrepancies WHERE status = \'OPEN\' ORDER BY created_at DESC');
+        res.json({
+            success: true,
+            discrepancies: result.rows,
+            count: result.rows.length
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        client.release();
+    }
 });
 
 // Get All Reports
-app.get('/reconciliation/reports', (req, res) => {
-    res.json({
-        success: true,
-        reports: reconciliationReports,
-        count: reconciliationReports.length
-    });
+app.get('/reconciliation/reports', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const result = await client.query('SELECT * FROM reconciliation_reports ORDER BY created_at DESC');
+        res.json({
+            success: true,
+            reports: result.rows,
+            count: result.rows.length
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        client.release();
+    }
 });
 
 // Resolve Discrepancy
-app.patch('/reconciliation/discrepancy/:id/resolve', (req, res) => {
-    const discrepancy = discrepancies.find(d => d.id === req.params.id);
-    if (!discrepancy) {
-        return res.status(404).json({ success: false, message: 'Discrepancy not found' });
+app.patch('/reconciliation/discrepancy/:id/resolve', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const result = await client.query(
+            'UPDATE discrepancies SET status = \'RESOLVED\', resolved_at = NOW() WHERE id = $1 RETURNING *',
+            [req.params.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Discrepancy not found' });
+        }
+
+        res.json({
+            success: true,
+            discrepancy: result.rows[0],
+            message: 'Discrepancy resolved'
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        client.release();
     }
-
-    discrepancy.resolved = true;
-    discrepancy.resolved_at = new Date().toISOString();
-
-    res.json({
-        success: true,
-        discrepancy,
-        message: 'Discrepancy resolved'
-    });
 });
 
 app.listen(PORT, () => {

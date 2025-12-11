@@ -9,12 +9,51 @@ const api = axios.create({
     },
 });
 
+api.interceptors.request.use((config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    if (config.method === 'post' && !config.headers['idempotency-key']) {
+        // Use crypto.randomUUID() if available, otherwise fallback (though modern browsers support it)
+        if (self.crypto && self.crypto.randomUUID) {
+            config.headers['idempotency-key'] = self.crypto.randomUUID();
+        } else {
+            // Simple fallback for older environments if needed
+            config.headers['idempotency-key'] = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+    }
+
+    return config;
+});
+
+// Auth Service
+export const authService = {
+    register: (data) => api.post('/auth/register', data),
+    login: (credentials) => api.post('/auth/login', credentials),
+    getMerchants: () => api.get('/auth/merchants'),
+};
+
 // Invoice Service
 export const invoiceService = {
-    createInvoice: (formData) => api.post('/invoices', formData),
-    getInvoices: () => api.get('/invoices'),
+    createInvoice: (formData) => api.post('/invoices', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+    getInvoices: (merchantId) => api.get('/invoices', { params: { merchant_id: merchantId } }),
     getInvoice: (id) => api.get(`/invoices/${id}`),
     updateInvoiceStatus: (id, status) => api.patch(`/invoices/${id}/status`, { status }),
+    performAction: (id, action, reason) => api.post(`/invoices/${id}/action`, { action, reason }),
+    getAnalytics: () => api.get('/invoices/analytics'),
+};
+
+// Inventory Service
+export const inventoryService = {
+    getInventory: (merchantId) => api.get(`/inventory/${merchantId}`),
+    adjustStock: (data) => api.post('/inventory/adjust', data),
 };
 
 // Blockchain Service
@@ -61,7 +100,7 @@ export const gstReturnService = {
     generateGSTR1: (data) => api.post('/gst/generate/gstr1', data),
     generateGSTR3B: (data) => api.post('/gst/generate/gstr3b', data),
     getReturn: (id) => api.get(`/gst/returns/${id}`),
-    getReturns: (type) => api.get('/gst/returns', { params: { type } }),
+    getReturns: (type, merchant_id) => api.get('/gst/returns', { params: { type, merchant_id } }),
     updateReturnStatus: (id, status) => api.patch(`/gst/returns/${id}/status`, { status }),
     deleteReturn: (id) => api.delete(`/gst/returns/${id}`),
 };

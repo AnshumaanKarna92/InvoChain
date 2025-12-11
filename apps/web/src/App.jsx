@@ -1,5 +1,5 @@
 import { useState, createContext, useContext, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import Invoices from './pages/Invoices';
 import Reconciliation from './pages/Reconciliation';
@@ -7,6 +7,10 @@ import GSTReturns from './pages/GSTReturns';
 import EInvoice from './pages/EInvoice';
 import CreditDebitNotes from './pages/CreditDebitNotes';
 import Payments from './pages/Payments';
+import Notifications from './pages/Notifications';
+import Register from './pages/Register';
+import Login from './pages/Login';
+import { ToastProvider } from './context/ToastContext';
 
 import '@rainbow-me/rainbowkit/styles.css';
 import {
@@ -33,9 +37,21 @@ export const useDarkMode = () => {
   return context;
 };
 
+// Auth Context
+const AuthContext = createContext();
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+};
+
 function Navigation() {
   const location = useLocation();
   const { darkMode, toggleDarkMode } = useDarkMode();
+  const { user, logout } = useAuth();
 
   const isActive = (path) => location.pathname === path;
 
@@ -50,10 +66,15 @@ function Navigation() {
     } px-4 h-16 flex items-center text-sm font-medium transition-all duration-200
   `;
 
+  // Don't show navigation on login/register pages
+  if (['/login', '/register'].includes(location.pathname)) {
+    return null;
+  }
+
   return (
     <nav className={`${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} border-b transition-colors duration-200`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
+      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-15">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
               <Link to="/" className="flex items-center space-x-3">
@@ -67,24 +88,49 @@ function Navigation() {
                 </span>
               </Link>
             </div>
-            <div className="hidden sm:ml-12 sm:flex sm:space-x-1">
-              <Link to="/" className={navLinkClass('/')}>Dashboard</Link>
-              <Link to="/invoices" className={navLinkClass('/invoices')}>Invoices</Link>
-              <Link to="/reconciliation" className={navLinkClass('/reconciliation')}>Reconciliation</Link>
-              <Link to="/gst-returns" className={navLinkClass('/gst-returns')}>GST Returns</Link>
-              <Link to="/e-invoice" className={navLinkClass('/e-invoice')}>E-Invoice</Link>
-              <Link to="/notes" className={navLinkClass('/notes')}>Notes</Link>
-              <Link to="/payments" className={navLinkClass('/payments')}>Payments</Link>
-            </div>
+            {user && (
+              <div className="hidden sm:ml-12 sm:flex sm:space-x-1">
+                <Link to="/" className={navLinkClass('/')}>Dashboard</Link>
+                <Link to="/invoices" className={navLinkClass('/invoices')}>Invoices</Link>
+                <Link to="/reconciliation" className={navLinkClass('/reconciliation')}>Reconciliation</Link>
+                <Link to="/gst-returns" className={navLinkClass('/gst-returns')}>GST Returns</Link>
+                <Link to="/e-invoice" className={navLinkClass('/e-invoice')}>E-Invoice</Link>
+                <Link to="/notes" className={navLinkClass('/notes')}>Notes</Link>
+                <Link to="/payments" className={navLinkClass('/payments')}>Payments</Link>
+              </div>
+            )}
           </div>
           <div className="hidden sm:ml-6 sm:flex sm:items-center space-x-4">
+            {user && (
+              <>
+                {/* Notification Icon */}
+                <Link to="/notifications" className={`p-2 rounded-lg ${darkMode ? 'hover:bg-slate-800 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-600 hover:text-slate-900'} transition-all duration-200 relative`}>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                </Link>
+
+                {/* User Info */}
+                <div className={`hidden md:flex items-center space-x-3 px-3 py-1.5 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                  <div className="text-right">
+                    <p className={`text-xs font-medium ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                      {user.businessName || 'User'}
+                    </p>
+                    <p className={`text-xs ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                      {user.gstin || 'No GSTIN'}
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+
             <button
               onClick={toggleDarkMode}
               className={`p-2 rounded-lg ${darkMode ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} transition-all duration-200`}
               aria-label="Toggle dark mode"
             >
               {darkMode ? (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-5 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
                 </svg>
               ) : (
@@ -94,12 +140,33 @@ function Navigation() {
               )}
             </button>
             <ConnectButton />
+
+            {user && (
+              <button
+                onClick={logout}
+                className={`ml-1 px-5 py-1 rounded-lg text-sm font-medium transition-colors ${darkMode
+                  ? 'bg-red-600 hover:bg-red-900 text-white'
+                  : 'bg-red-100 hover:bg-red-200 text-red-700'
+                  }`}
+              >
+                Sign Out
+              </button>
+            )}
           </div>
         </div>
       </div>
     </nav>
   );
 }
+
+// Protected Route Component
+const ProtectedRoute = ({ children }) => {
+  const { user } = useAuth();
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
 
 function MainContent() {
   const { darkMode } = useDarkMode();
@@ -141,13 +208,17 @@ function MainContent() {
         <Navigation />
         <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/invoices" element={<Invoices />} />
-            <Route path="/reconciliation" element={<Reconciliation />} />
-            <Route path="/gst-returns" element={<GSTReturns />} />
-            <Route path="/e-invoice" element={<EInvoice />} />
-            <Route path="/notes" element={<CreditDebitNotes />} />
-            <Route path="/payments" element={<Payments />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+
+            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
+            <Route path="/reconciliation" element={<ProtectedRoute><Reconciliation /></ProtectedRoute>} />
+            <Route path="/gst-returns" element={<ProtectedRoute><GSTReturns /></ProtectedRoute>} />
+            <Route path="/e-invoice" element={<ProtectedRoute><EInvoice /></ProtectedRoute>} />
+            <Route path="/notes" element={<ProtectedRoute><CreditDebitNotes /></ProtectedRoute>} />
+            <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
+            <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
           </Routes>
         </main>
       </div>
@@ -157,22 +228,45 @@ function MainContent() {
 
 function App() {
   const [darkMode, setDarkMode] = useState(false);
+  const [user, setUser] = useState(() => {
+    const storedUser = localStorage.getItem('user');
+    return storedUser ? JSON.parse(storedUser) : null;
+  });
+
+  // Remove the useEffect that was setting user, as we now do it in initial state
+  // useEffect(() => {
+  //   const storedUser = localStorage.getItem('user');
+  //   if (storedUser) {
+  //     setUser(JSON.parse(storedUser));
+  //   }
+  // }, []);
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
   };
 
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    window.location.href = '/login';
+  };
+
   return (
     <DarkModeContext.Provider value={{ darkMode, toggleDarkMode }}>
-      <WagmiProvider config={config}>
-        <QueryClientProvider client={queryClient}>
-          <RainbowKitProvider>
-            <Router>
-              <MainContent />
-            </Router>
-          </RainbowKitProvider>
-        </QueryClientProvider>
-      </WagmiProvider>
+      <AuthContext.Provider value={{ user, setUser, logout }}>
+        <ToastProvider>
+          <WagmiProvider config={config}>
+            <QueryClientProvider client={queryClient}>
+              <RainbowKitProvider>
+                <Router>
+                  <MainContent />
+                </Router>
+              </RainbowKitProvider>
+            </QueryClientProvider>
+          </WagmiProvider>
+        </ToastProvider>
+      </AuthContext.Provider>
     </DarkModeContext.Provider>
   );
 }

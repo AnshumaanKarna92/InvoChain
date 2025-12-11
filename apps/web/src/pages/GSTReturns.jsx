@@ -1,21 +1,24 @@
 import { useState, useEffect } from 'react';
-import { gstReturnService, invoiceService } from '../services/api';
-import { useDarkMode } from '../App';
+import { gstReturnService } from '../services/api';
+import { useDarkMode, useAuth } from '../App';
 
 export default function GSTReturns() {
     const { darkMode } = useDarkMode();
+    const { user } = useAuth();
     const [returns, setReturns] = useState([]);
     const [loading, setLoading] = useState(false);
     const [selectedReturn, setSelectedReturn] = useState(null);
     const [showModal, setShowModal] = useState(false);
 
     useEffect(() => {
-        fetchReturns();
-    }, []);
+        if (user?.merchant_id) {
+            fetchReturns();
+        }
+    }, [user]);
 
     const fetchReturns = async () => {
         try {
-            const response = await gstReturnService.getReturns();
+            const response = await gstReturnService.getReturns(null, user?.merchant_id);
             setReturns(response.data.returns || []);
         } catch (error) {
             console.error('Error fetching returns:', error);
@@ -23,26 +26,19 @@ export default function GSTReturns() {
     };
 
     const handleGenerateReturn = async (type) => {
+        if (!user?.merchant_id) {
+            alert('Please login to generate GST returns');
+            return;
+        }
+
         setLoading(true);
         try {
             const month = new Date().getMonth() + 1;
             const year = new Date().getFullYear();
 
-            const invoicesResponse = await invoiceService.getInvoices();
-            const invoices = invoicesResponse.data.invoices || [];
-
-            if (invoices.length === 0) {
-                alert('No invoices found. Please create invoices first.');
-                setLoading(false);
-                return;
-            }
-
             const payload = {
-                gstin: '29ABCDE1234F1Z5',
-                period: { month, year },
-                invoices: invoices,
-                credit_notes: [],
-                debit_notes: []
+                merchant_id: user.merchant_id,
+                period: { month, year }
             };
 
             if (type === 'GSTR1') {
@@ -55,7 +51,7 @@ export default function GSTReturns() {
             fetchReturns();
         } catch (error) {
             console.error(`Error generating ${type}:`, error);
-            alert(`Failed to generate ${type}: ${error.response?.data?.message || error.message}`);
+            alert(`Failed to generate ${type}: ${error.response?.data?.error || error.message}`);
         } finally {
             setLoading(false);
         }
@@ -170,8 +166,8 @@ export default function GSTReturns() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`px-3 py-1 inline-flex text-xs font-semibold rounded-full ${ret.status === 'FILED'
-                                                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
-                                                    : 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-md'
+                                                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
+                                                : 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-md'
                                                 }`}>
                                                 {ret.status}
                                             </span>

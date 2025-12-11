@@ -3,10 +3,17 @@
     "version": "1.0.0",
     "private": true,
     "scripts": {
-        "dev": "concurrently \"npm run dev --prefix services/api-gateway\" \"npm run dev --prefix services/blockchain-service\" \"npm run dev --prefix services/invoice-service\" \"npm run dev --prefix services/payment-service\" \"npm run dev --prefix services/reconciliation-service\" \"npm run dev --prefix services/credit-debit-note-service\" \"npm run dev --prefix services/gst-return-service\" \"npm run dev --prefix services/gst-adapter-service\" \"npm run dev --prefix apps/web\"",
-        "install:all": "npm install && npm install --prefix apps/web && npm install --prefix services/api-gateway && npm install --prefix services/blockchain-service && npm install --prefix services/invoice-service && npm install --prefix services/payment-service && npm install --prefix services/reconciliation-service && npm install --prefix services/credit-debit-note-service && npm install --prefix services/gst-return-service && npm install --prefix services/gst-adapter-service"
+        "dev": "wait-on tcp:5433 && concurrently \"npm run dev --prefix services/api-gateway\" \"npm run dev --prefix services/auth-service\" \"npm run dev --prefix services/blockchain-service\" \"npm run dev --prefix services/invoice-service\" \"npm run dev --prefix services/payment-service\" \"npm run dev --prefix services/reconciliation-service\" \"npm run dev --prefix services/credit-debit-note-service\" \"npm run dev --prefix services/gst-return-service\" \"npm run dev --prefix services/gst-adapter-service\" \"npm run dev --prefix services/buyer-action-service\" \"npm run dev --prefix services/notification-service\" \"npm run dev --prefix services/merchant-registry-service\" \"npm run dev --prefix services/inventory-service\" \"npm run dev --prefix services/audit-service\" \"npm run dev --prefix apps/web\"",
+        "install:all": "npm install && npm install --prefix apps/web && npm install --prefix services/api-gateway && npm install --prefix services/auth-service && npm install --prefix services/blockchain-service && npm install --prefix services/invoice-service && npm install --prefix services/payment-service && npm install --prefix services/reconciliation-service && npm install --prefix services/credit-debit-note-service && npm install --prefix services/gst-return-service && npm install --prefix services/gst-adapter-service && npm install --prefix services/buyer-action-service && npm install --prefix services/notification-service && npm install --prefix services/merchant-registry-service && npm install --prefix services/inventory-service && npm install --prefix services/audit-service"
     },
     "devDependencies": {
         "concurrently": "^9.1.0"
+    },
+    "dependencies": {
+        "bcryptjs": "^3.0.3",
+        "dotenv": "^17.2.3",
+        "pg": "^8.16.3",
+        "uuid": "^13.0.0",
+        "wait-on": "^9.0.3"
     }
 }
