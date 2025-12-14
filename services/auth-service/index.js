@@ -41,9 +41,9 @@ app.get('/health', (req, res) => {
 app.post('/register', async (req, res) => {
     const client = await pool.connect();
     try {
-        const { businessName, gstin, email, password, address, phone } = req.body;
+        const { legalName, tradeName, gstin, email, password, address, phone } = req.body;
 
-        if (!businessName || !gstin || !email || !password) {
+        if (!legalName || !tradeName || !gstin || !email || !password) {
             return res.status(400).json({ success: false, message: 'Missing required fields' });
         }
 
@@ -77,21 +77,51 @@ app.post('/register', async (req, res) => {
         // Insert Merchant Profile (Basic)
         const merchantId = uuidv4();
         await client.query(
-            'INSERT INTO merchants (id, user_id, gstin, legal_name, address, phone, email) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-            [merchantId, userId, gstin, businessName, address, phone, email]
+            'INSERT INTO merchants (id, user_id, gstin, legal_name, trade_name, address, phone, email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+            [merchantId, userId, gstin, legalName, tradeName, address, phone, email]
         );
 
         await client.query('COMMIT');
 
         res.status(201).json({
             success: true,
-            user: { id: userId, email, businessName, merchant_id: merchantId },
+            user: { id: userId, email, legalName, tradeName, merchant_id: merchantId },
             message: 'Registration successful'
         });
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Register Error:', error);
         res.status(500).json({ success: false, message: error.message, error: error.message });
+    } finally {
+        client.release();
+    }
+});
+
+// Lookup Merchant by GSTIN
+app.get('/merchants/lookup', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { gstin } = req.query;
+        if (!gstin) {
+            return res.status(400).json({ success: false, message: 'GSTIN is required' });
+        }
+
+        const result = await client.query('SELECT legal_name, trade_name FROM merchants WHERE gstin = $1', [gstin]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Merchant not found' });
+        }
+
+        res.json({
+            success: true,
+            merchant: {
+                legal_name: result.rows[0].legal_name,
+                trade_name: result.rows[0].trade_name
+            }
+        });
+    } catch (error) {
+        console.error('Lookup Error:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
     } finally {
         client.release();
     }
@@ -116,7 +146,7 @@ app.post('/login', async (req, res) => {
         }
 
         // Fetch Merchant ID
-        const merchantRes = await client.query('SELECT id, gstin, legal_name FROM merchants WHERE user_id = $1', [user.id]);
+        const merchantRes = await client.query('SELECT id, gstin, legal_name, trade_name FROM merchants WHERE user_id = $1', [user.id]);
         const merchant = merchantRes.rows[0];
 
         // Generate JWT
@@ -140,7 +170,8 @@ app.post('/login', async (req, res) => {
                 role: user.role,
                 merchant_id: merchant ? merchant.id : null,
                 gstin: merchant ? merchant.gstin : null,
-                businessName: merchant ? merchant.legal_name : null
+                legalName: merchant ? merchant.legal_name : null,
+                tradeName: merchant ? merchant.trade_name : null
             },
             message: 'Login successful'
         });

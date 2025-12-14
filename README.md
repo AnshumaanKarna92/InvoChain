@@ -64,6 +64,7 @@ InvoChain is a **fully functional, production-ready** invoice management system 
 - Real-time availability tracking
 - Complete audit trail of all inventory movements
 - Atomic transactions for data integrity
+- **[NEW] UI for Manual Item Management**
 
 #### 📈 GST Returns Generation
 - **GSTR-1 Generation**: Automated B2B invoice reporting

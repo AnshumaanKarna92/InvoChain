@@ -1,9 +1,10 @@
-import { useState, createContext, useContext, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
+import Inventory from './pages/Inventory';
 import Invoices from './pages/Invoices';
 import Reconciliation from './pages/Reconciliation';
-import GSTReturns from './pages/GSTReturns';
+import GSTReturns from './pages/GSTReturnsPage';
 import EInvoice from './pages/EInvoice';
 import CreditDebitNotes from './pages/CreditDebitNotes';
 import Payments from './pages/Payments';
@@ -11,42 +12,11 @@ import Notifications from './pages/Notifications';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import { ToastProvider } from './context/ToastContext';
-
-import '@rainbow-me/rainbowkit/styles.css';
-import {
-  RainbowKitProvider,
-  ConnectButton,
-} from '@rainbow-me/rainbowkit';
-import { WagmiProvider } from 'wagmi';
-import {
-  QueryClientProvider,
-  QueryClient,
-} from "@tanstack/react-query";
-import { config } from './wagmi';
-
-const queryClient = new QueryClient();
-
-// Dark Mode Context
-const DarkModeContext = createContext();
-
-export const useDarkMode = () => {
-  const context = useContext(DarkModeContext);
-  if (!context) {
-    throw new Error('useDarkMode must be used within DarkModeProvider');
-  }
-  return context;
-};
-
-// Auth Context
-const AuthContext = createContext();
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
-};
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { DarkModeProvider, useDarkMode } from './context/ThemeContext';
+import ErrorBoundary from './components/ErrorBoundary';
+import { Web3Provider, ConnectButton } from './components/Web3Provider';
+import NotificationBell from './components/NotificationBell';
 
 function Navigation() {
   const location = useLocation();
@@ -91,6 +61,7 @@ function Navigation() {
             {user && (
               <div className="hidden sm:ml-12 sm:flex sm:space-x-1">
                 <Link to="/" className={navLinkClass('/')}>Dashboard</Link>
+                <Link to="/inventory" className={navLinkClass('/inventory')}>Inventory</Link>
                 <Link to="/invoices" className={navLinkClass('/invoices')}>Invoices</Link>
                 <Link to="/reconciliation" className={navLinkClass('/reconciliation')}>Reconciliation</Link>
                 <Link to="/gst-returns" className={navLinkClass('/gst-returns')}>GST Returns</Link>
@@ -103,12 +74,8 @@ function Navigation() {
           <div className="hidden sm:ml-6 sm:flex sm:items-center space-x-4">
             {user && (
               <>
-                {/* Notification Icon */}
-                <Link to="/notifications" className={`p-2 rounded-lg ${darkMode ? 'hover:bg-slate-800 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-600 hover:text-slate-900'} transition-all duration-200 relative`}>
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                  </svg>
-                </Link>
+                {/* Notification Bell with Unread Count */}
+                <NotificationBell />
 
                 {/* User Info */}
                 <div className={`hidden md:flex items-center space-x-3 px-3 py-1.5 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-100'}`}>
@@ -212,6 +179,7 @@ function MainContent() {
             <Route path="/register" element={<Register />} />
 
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
             <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
             <Route path="/reconciliation" element={<ProtectedRoute><Reconciliation /></ProtectedRoute>} />
             <Route path="/gst-returns" element={<ProtectedRoute><GSTReturns /></ProtectedRoute>} />
@@ -227,47 +195,20 @@ function MainContent() {
 }
 
 function App() {
-  const [darkMode, setDarkMode] = useState(false);
-  const [user, setUser] = useState(() => {
-    const storedUser = localStorage.getItem('user');
-    return storedUser ? JSON.parse(storedUser) : null;
-  });
-
-  // Remove the useEffect that was setting user, as we now do it in initial state
-  // useEffect(() => {
-  //   const storedUser = localStorage.getItem('user');
-  //   if (storedUser) {
-  //     setUser(JSON.parse(storedUser));
-  //   }
-  // }, []);
-
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-  };
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
-    window.location.href = '/login';
-  };
-
   return (
-    <DarkModeContext.Provider value={{ darkMode, toggleDarkMode }}>
-      <AuthContext.Provider value={{ user, setUser, logout }}>
-        <ToastProvider>
-          <WagmiProvider config={config}>
-            <QueryClientProvider client={queryClient}>
-              <RainbowKitProvider>
-                <Router>
-                  <MainContent />
-                </Router>
-              </RainbowKitProvider>
-            </QueryClientProvider>
-          </WagmiProvider>
-        </ToastProvider>
-      </AuthContext.Provider>
-    </DarkModeContext.Provider>
+    <ErrorBoundary>
+      <DarkModeProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <Web3Provider>
+              <Router>
+                <MainContent />
+              </Router>
+            </Web3Provider>
+          </ToastProvider>
+        </AuthProvider>
+      </DarkModeProvider>
+    </ErrorBoundary>
   );
 }
 

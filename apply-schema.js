@@ -16,6 +16,7 @@ async function applySchema() {
         const client = await pool.connect();
 
         console.log('Applying schema...');
+        await client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
         await client.query(schemaSql);
 
         console.log('Schema applied successfully!');

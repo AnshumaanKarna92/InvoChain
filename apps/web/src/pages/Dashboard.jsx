@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoiceService, reconciliationService, paymentService } from '../services/api';
-import { useDarkMode, useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
+import { useDarkMode } from '../context/ThemeContext';
 
 export default function Dashboard() {
     const { darkMode } = useDarkMode();
@@ -10,7 +11,13 @@ export default function Dashboard() {
         reconciled: 0,
         pending: 0,
         discrepancies: 0,
-        collected: 0,
+        // Role-agnostic metrics
+        totalInvoicedAsSeller: 0,
+        totalCollected: 0,
+        totalInvoicedAsBuyer: 0,
+        totalPaid: 0,
+        receivables: 0,
+        payables: 0
     });
     const [recentActivity, setRecentActivity] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -23,24 +30,36 @@ export default function Dashboard() {
 
     const fetchDashboardData = async () => {
         try {
-            const [invoicesRes, discrepanciesRes, analyticsRes] = await Promise.all([
-                invoiceService.getInvoices(user.merchant_id),
+            const [invoicesRes, discrepanciesRes, , paymentAnalyticsRes] = await Promise.all([
+                invoiceService.getInvoices(user.merchant_id, user.gstin),
                 reconciliationService.getDiscrepancies(),
-                paymentService.getAnalytics().catch(() => ({ data: { total_collected: 0 } })),
+                invoiceService.getAnalytics(user.merchant_id),
+                paymentService.getAnalytics(user.merchant_id),
             ]);
 
             const invoices = invoicesRes.data.invoices || [];
             const discrepancies = discrepanciesRes.data.discrepancies || [];
-            const analytics = analyticsRes.data || { total_collected: 0 };
+            const paymentAnalytics = paymentAnalyticsRes.data || {};
 
-            console.log('Dashboard invoices:', invoices); // Debug log
+            // Compute role-specific invoice totals
+            const invoicesAsSeller = invoices.filter(inv => inv.seller_merchant_id === user.merchant_id);
+            const invoicesAsBuyer = invoices.filter(inv => inv.buyer_gstin === user.gstin);
+
+            const totalInvoicedAsSeller = invoicesAsSeller.reduce((sum, inv) => sum + parseFloat(inv.total_amount || 0), 0);
+            const totalInvoicedAsBuyer = invoicesAsBuyer.reduce((sum, inv) => sum + parseFloat(inv.total_amount || 0), 0);
 
             setStats({
                 totalInvoices: invoices.length,
-                reconciled: invoices.filter(inv => inv.status === 'ACCEPTED').length, // Changed from RECONCILED
-                pending: invoices.filter(inv => inv.status === 'ISSUED').length, // Changed from PENDING
+                reconciled: invoices.filter(inv => inv.status === 'ACCEPTED' || inv.status === 'PAID').length,
+                pending: invoices.filter(inv => inv.status === 'ISSUED').length,
                 discrepancies: discrepancies.length,
-                collected: analytics.total_collected || 0,
+                // Role-agnostic financial metrics
+                totalInvoicedAsSeller: totalInvoicedAsSeller,
+                totalCollected: paymentAnalytics.total_collected || 0,
+                totalInvoicedAsBuyer: totalInvoicedAsBuyer,
+                totalPaid: paymentAnalytics.total_paid || 0,
+                receivables: (paymentAnalytics.outstanding ?? 0),
+                payables: totalInvoicedAsBuyer - (paymentAnalytics.total_paid || 0)
             });
 
             // Process recent activity from invoices
@@ -52,6 +71,165 @@ export default function Dashboard() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const FinancialOverview = ({ stats }) => {
+        const netBalance = (stats.receivables || 0) - (stats.payables || 0);
+        const isPositive = netBalance >= 0;
+
+        return (
+            <div className={`p-6 rounded-xl border shadow-lg ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                        Financial Overview
+                    </h3>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${darkMode ? 'bg-slate-700' : 'bg-slate-100'}`}>
+                        <svg className={`w-5 h-5 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                    </div>
+                </div>
+
+                {/* Two-Column Layout: Sales vs Purchases */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                    {/* Sales (As Seller) */}
+                    <div className={`p-4 rounded-xl ${darkMode ? 'bg-gradient-to-br from-slate-700/80 to-slate-700/40' : 'bg-gradient-to-br from-emerald-50 to-teal-50'} border ${darkMode ? 'border-slate-600' : 'border-emerald-100'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center">
+                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center mr-3 ${darkMode ? 'bg-emerald-500/20' : 'bg-emerald-100'}`}>
+                                    <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11l5-5m0 0l5 5m-5-5v12" />
+                                    </svg>
+                                </div>
+                                <h4 className={`font-semibold ${darkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>Sales</h4>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-emerald-900/50 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>Seller</span>
+                        </div>
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                                <span className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Invoiced</span>
+                                <span className={`font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                                    ₹{(stats.totalInvoicedAsSeller || 0).toLocaleString()}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Collected</span>
+                                <span className="font-semibold text-emerald-500">
+                                    ₹{(stats.totalCollected || 0).toLocaleString()}
+                                </span>
+                            </div>
+                            <div className={`pt-3 border-t ${darkMode ? 'border-slate-600' : 'border-emerald-100'}`}>
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className={`text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>Receivables</span>
+                                    <span className={`font-bold text-lg ${stats.receivables > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                                        ₹{(stats.receivables || 0).toLocaleString()}
+                                    </span>
+                                </div>
+                                <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden dark:bg-slate-600">
+                                    <div
+                                        className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all duration-700"
+                                        style={{ width: `${stats.totalInvoicedAsSeller > 0 ? ((stats.totalCollected / stats.totalInvoicedAsSeller) * 100) : 0}%` }}
+                                    />
+                                </div>
+                                <p className={`text-xs mt-1.5 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                                    {stats.totalInvoicedAsSeller > 0
+                                        ? `${((stats.totalCollected / stats.totalInvoicedAsSeller) * 100).toFixed(0)}% collected`
+                                        : 'No sales yet'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Purchases (As Buyer) */}
+                    <div className={`p-4 rounded-xl ${darkMode ? 'bg-gradient-to-br from-slate-700/80 to-slate-700/40' : 'bg-gradient-to-br from-blue-50 to-indigo-50'} border ${darkMode ? 'border-slate-600' : 'border-blue-100'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center">
+                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center mr-3 ${darkMode ? 'bg-blue-500/20' : 'bg-blue-100'}`}>
+                                    <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 13l-5 5m0 0l-5-5m5 5V6" />
+                                    </svg>
+                                </div>
+                                <h4 className={`font-semibold ${darkMode ? 'text-blue-400' : 'text-blue-700'}`}>Purchases</h4>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>Buyer</span>
+                        </div>
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                                <span className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Invoiced</span>
+                                <span className={`font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                                    ₹{(stats.totalInvoicedAsBuyer || 0).toLocaleString()}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Paid</span>
+                                <span className="font-semibold text-blue-500">
+                                    ₹{(stats.totalPaid || 0).toLocaleString()}
+                                </span>
+                            </div>
+                            <div className={`pt-3 border-t ${darkMode ? 'border-slate-600' : 'border-blue-100'}`}>
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className={`text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>Payables</span>
+                                    <span className={`font-bold text-lg ${stats.payables > 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                                        ₹{Math.max(0, stats.payables || 0).toLocaleString()}
+                                    </span>
+                                </div>
+                                <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden dark:bg-slate-600">
+                                    <div
+                                        className="h-full bg-gradient-to-r from-blue-400 to-indigo-500 rounded-full transition-all duration-700"
+                                        style={{ width: `${stats.totalInvoicedAsBuyer > 0 ? ((stats.totalPaid / stats.totalInvoicedAsBuyer) * 100) : 0}%` }}
+                                    />
+                                </div>
+                                <p className={`text-xs mt-1.5 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                                    {stats.totalInvoicedAsBuyer > 0
+                                        ? `${((stats.totalPaid / stats.totalInvoicedAsBuyer) * 100).toFixed(0)}% paid`
+                                        : 'No purchases yet'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Net Outstanding Balance */}
+                <div className={`p-4 rounded-xl ${isPositive
+                    ? (darkMode ? 'bg-gradient-to-r from-emerald-900/40 to-teal-900/30 border-emerald-700/50' : 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200')
+                    : (darkMode ? 'bg-gradient-to-r from-red-900/40 to-rose-900/30 border-red-700/50' : 'bg-gradient-to-r from-red-50 to-rose-50 border-red-200')
+                    } border`}>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-3 ${isPositive
+                                ? (darkMode ? 'bg-emerald-500/20' : 'bg-emerald-100')
+                                : (darkMode ? 'bg-red-500/20' : 'bg-red-100')}`}>
+                                <svg className={`w-5 h-5 ${isPositive ? 'text-emerald-500' : 'text-red-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    {isPositive
+                                        ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                        : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                                    }
+                                </svg>
+                            </div>
+                            <div>
+                                <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-slate-700'}`}>
+                                    Net Balance
+                                </p>
+                                <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                    {isPositive ? 'Amount owed to you' : 'Amount you owe'}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <p className={`text-2xl font-bold ${isPositive ? 'text-emerald-500' : 'text-red-500'}`}>
+                                {isPositive ? '+' : '-'}₹{Math.abs(netBalance).toLocaleString()}
+                            </p>
+                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${isPositive
+                                ? (darkMode ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
+                                : (darkMode ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-700')
+                                }`}>
+                                {isPositive ? 'Receivable' : 'Payable'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
     };
 
     const StatCard = ({ title, value, icon, gradient, iconBg }) => (
@@ -86,10 +264,56 @@ export default function Dashboard() {
     return (
         <div className="px-4 py-6 sm:px-0">
             <div className="mb-8">
-                <h1 className={`text-4xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'} mb-2`}>
-                    Dashboard
-                </h1>
-                <p className={`text-lg ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Overview of your invoice management system</p>
+                {/* GST Profile Context Card */}
+                <div className={`rounded-xl border shadow-md overflow-hidden ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                    <div className={`px-6 py-3 border-b ${darkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-200'} flex justify-between items-center`}>
+                        <h3 className={`text-sm font-semibold uppercase tracking-wider ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                            GST Taxpayer Profile
+                        </h3>
+                        <span className={`text-xs font-medium px-2 py-1 rounded ${darkMode ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-800'}`}>
+                            Active
+                        </span>
+                    </div>
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'} uppercase mb-1`}>GSTIN</p>
+                            <p className={`text-lg font-bold font-mono ${darkMode ? 'text-white' : 'text-slate-900'}`}>{user?.gstin || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'} uppercase mb-1`}>Legal Name</p>
+                            <p className={`text-base font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{user?.legalName || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'} uppercase mb-1`}>Trade Name</p>
+                            <p className={`text-base font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{user?.tradeName || 'N/A'}</p>
+                        </div>
+                        <div className={`col-span-1 md:col-span-3 h-px ${darkMode ? 'bg-slate-700' : 'bg-slate-100'} my-2`}></div>
+                        <div>
+                            <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'} uppercase mb-1`}>Financial Year</p>
+                            <p className={`text-sm font-medium ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                                {(() => {
+                                    const today = new Date();
+                                    const month = today.getMonth(); // 0-11
+                                    const year = today.getFullYear();
+                                    // If Jan-Mar (0-2), FY is (Year-1)-Year. Else Year-(Year+1)
+                                    return month < 3 ? `${year - 1}-${year}` : `${year}-${year + 1}`;
+                                })()}
+                            </p>
+                        </div>
+                        <div>
+                            <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'} uppercase mb-1`}>Return Period</p>
+                            <p className={`text-sm font-medium ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                                {new Date(new Date().setMonth(new Date().getMonth() - 1)).toLocaleString('default', { month: 'long', year: 'numeric' })}
+                            </p>
+                        </div>
+                        <div>
+                            <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'} uppercase mb-1`}>Last Updated</p>
+                            <p className={`text-sm font-medium ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                                {new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
@@ -103,103 +327,69 @@ export default function Dashboard() {
                     }
                 />
                 <StatCard
-                    title="Reconciled"
-                    value={stats.reconciled}
+                    title="Collected (Sales)"
+                    value={`₹${(stats.totalCollected ?? 0).toLocaleString()}`}
                     gradient="from-emerald-500 to-teal-600"
                     iconBg="bg-gradient-to-br from-emerald-500 to-teal-600"
-                    icon={
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    }
-                />
-                <StatCard
-                    title="Pending"
-                    value={stats.pending}
-                    gradient="from-amber-500 to-orange-600"
-                    iconBg="bg-gradient-to-br from-amber-500 to-orange-600"
-                    icon={
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    }
-                />
-                <StatCard
-                    title="Total Collected"
-                    value={`₹${(stats.collected || 0).toLocaleString('en-IN')}`}
-                    gradient="from-blue-500 to-cyan-600"
-                    iconBg="bg-gradient-to-br from-blue-500 to-cyan-600"
                     icon={
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     }
                 />
+                <StatCard
+                    title="Paid (Purchases)"
+                    value={`₹${(stats.totalPaid ?? 0).toLocaleString()}`}
+                    gradient="from-blue-500 to-cyan-600"
+                    iconBg="bg-gradient-to-br from-blue-500 to-cyan-600"
+                    icon={
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    }
+                />
+                <StatCard
+                    title="Net Receivables"
+                    value={`₹${(stats.receivables ?? 0).toLocaleString()}`}
+                    gradient="from-amber-500 to-orange-600"
+                    iconBg="bg-gradient-to-br from-amber-500 to-orange-600"
+                    icon={
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+                    }
+                />
             </div>
 
-            {stats.discrepancies > 0 && (
-                <div className={`mb-8 ${darkMode ? 'bg-red-900/30 border-red-700/50 backdrop-blur-sm' : 'bg-red-50 border-red-200'} border rounded-xl p-4 shadow-lg`}>
-                    <div className="flex items-start">
-                        <div className="flex-shrink-0">
-                            <div className={`w-10 h-10 ${darkMode ? 'bg-red-800' : 'bg-red-100'} rounded-lg flex items-center justify-center`}>
-                                <svg className={`h-6 w-6 ${darkMode ? 'text-red-400' : 'text-red-600'}`} fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                                </svg>
-                            </div>
-                        </div>
-                        <div className="ml-4">
-                            <h3 className={`text-sm font-semibold ${darkMode ? 'text-red-300' : 'text-red-800'}`}>Attention Required</h3>
-                            <p className={`mt-1 text-sm ${darkMode ? 'text-red-400' : 'text-red-700'}`}>
-                                You have {stats.discrepancies} discrepancies that require review.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <FinancialOverview stats={stats} />
 
-            <div className={`${darkMode ? 'bg-slate-800/50 backdrop-blur-sm border-slate-700/50' : 'bg-white border-slate-200'} shadow-xl rounded-xl border`}>
-                <div className={`px-6 py-5 ${darkMode ? 'border-slate-700/50' : 'border-slate-200'} border-b bg-gradient-to-r ${darkMode ? 'from-slate-800 to-slate-800/50' : 'from-slate-50 to-white'}`}>
-                    <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Recent Activity</h2>
-                    <p className={`mt-1 text-sm ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Track your latest invoice activities</p>
-                </div>
-                <div className="px-6 py-6">
-                    {recentActivity.length === 0 ? (
-                        <div className={`text-center py-6 ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                            <div className={`mx-auto w-16 h-16 ${darkMode ? 'bg-slate-700' : 'bg-slate-100'} rounded-2xl flex items-center justify-center mb-4`}>
-                                <svg className={`h-8 w-8 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
-                            </div>
-                            <p className={`text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-slate-900'}`}>No recent activity</p>
-                            <p className={`mt-1 text-sm ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>Your invoice activities will appear here</p>
-                        </div>
-                    ) : (
-                        <div className="flow-root">
-                            <ul className={`-my-5 divide-y ${darkMode ? 'divide-slate-700/50' : 'divide-slate-200'}`}>
-                                {recentActivity.map((invoice) => (
-                                    <li key={invoice.id} className="py-4">
-                                        <div className="flex items-center space-x-4">
-                                            <div className="flex-shrink-0">
-                                                <div className={`h-10 w-10 rounded-full flex items-center justify-center ${invoice.status === 'PAID' ? 'bg-green-100 text-green-600' :
-                                                    invoice.status === 'PENDING' ? 'bg-amber-100 text-amber-600' :
-                                                        'bg-slate-100 text-slate-600'
-                                                    }`}>
-                                                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                    </svg>
-                                                </div>
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-slate-900'} truncate`}>
-                                                    Invoice #{invoice.invoice_number} Created
-                                                </p>
-                                                <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'} truncate`}>
-                                                    To: {invoice.buyer_gstin || invoice.buyer_id}
-                                                </p>
-                                            </div>
-                                            <div className="inline-flex items-center text-base font-semibold text-slate-900 dark:text-white">
-                                                ₹{invoice.total_amount}
-                                            </div>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
+                <div className={`p-6 rounded-xl border shadow-lg ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                    <h3 className={`text-lg font-semibold mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Recent Activity</h3>
+                    <div className="space-y-4">
+                        {recentActivity.length > 0 ? (
+                            recentActivity.map((invoice) => (
+                                <div key={invoice.id} className={`flex items-center justify-between p-3 rounded-lg ${darkMode ? 'bg-slate-700/50' : 'bg-slate-50'}`}>
+                                    <div>
+                                        <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                                            Invoice #{invoice.invoice_number}
+                                        </p>
+                                        <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                                            {new Date(invoice.created_at || invoice.invoice_date).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                                            ₹{parseFloat(invoice.total_amount).toLocaleString()}
+                                        </p>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full ${invoice.status === 'ACCEPTED' ? 'bg-green-100 text-green-800' :
+                                            invoice.status === 'ISSUED' ? 'bg-yellow-100 text-yellow-800' :
+                                                invoice.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
+                                                    'bg-gray-100 text-gray-800'
+                                            }`}>
+                                            {invoice.status}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>No recent activity</p>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

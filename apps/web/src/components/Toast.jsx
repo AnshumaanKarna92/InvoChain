@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useDarkMode } from '../App';
+import { useDarkMode } from '../context/ThemeContext';
 
 export default function Toast({ message, type = 'success', onClose, duration = 3000 }) {
     const { darkMode } = useDarkMode();

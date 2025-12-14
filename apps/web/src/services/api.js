@@ -36,6 +36,7 @@ export const authService = {
     register: (data) => api.post('/auth/register', data),
     login: (credentials) => api.post('/auth/login', credentials),
     getMerchants: () => api.get('/auth/merchants'),
+    lookupMerchant: (gstin) => api.get(`/auth/merchants/lookup`, { params: { gstin } }),
 };
 
 // Invoice Service
@@ -43,12 +44,23 @@ export const invoiceService = {
     createInvoice: (formData) => api.post('/invoices', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
     }),
-    getInvoices: (merchantId) => api.get('/invoices', { params: { merchant_id: merchantId } }),
+    getInvoices: (merchantId, gstin = null) => {
+        const params = {};
+        if (merchantId) params.merchant_id = merchantId;
+        if (gstin) params.gstin = gstin;
+        return api.get('/invoices', { params });
+    },
     getInvoice: (id) => api.get(`/invoices/${id}`),
     updateInvoiceStatus: (id, status) => api.patch(`/invoices/${id}/status`, { status }),
     performAction: (id, action, reason) => api.post(`/invoices/${id}/action`, { action, reason }),
-    getAnalytics: () => api.get('/invoices/analytics'),
+    getAnalytics: (merchantId) => api.get('/invoices/analytics', { params: { merchant_id: merchantId } }),
+    // E-Invoice methods
+    getEligibleForEInvoice: (merchantId) => api.get('/invoices/e-invoice/eligible', { params: { merchant_id: merchantId } }),
+    generateEInvoice: (invoiceId) => api.post(`/invoices/${invoiceId}/e-invoice/generate`),
+    getEInvoices: (merchantId) => api.get('/invoices/e-invoice/list', { params: { merchant_id: merchantId } }),
+    cancelEInvoice: (invoiceId, reason) => api.post(`/invoices/${invoiceId}/e-invoice/cancel`, { reason }),
 };
+
 
 // Inventory Service
 export const inventoryService = {
@@ -62,6 +74,10 @@ export const blockchainService = {
     updateStatus: (data) => api.post('/blockchain/update-status', data),
     verifyInvoice: (data) => api.post('/blockchain/verify', data),
     getLedger: () => api.get('/blockchain/ledger'),
+    // New Anchor Methods
+    getAnchors: (recordType, recordId) => api.get(`/blockchain/anchor/${recordType}/${recordId}`),
+    verifyAnchor: (data) => api.post('/blockchain/verify', data),
+    getMerchantAnchors: (merchantId, recordType) => api.get('/blockchain/anchors', { params: { merchant_id: merchantId, record_type: recordType } }),
 };
 
 // Buyer Action Service
@@ -74,8 +90,10 @@ export const buyerActionService = {
 
 // Notification Service
 export const notificationService = {
-    sendNotification: (data) => api.post('/notifications/send', data),
-    getNotifications: () => api.get('/notifications'),
+    getNotifications: (merchantId) => api.get('/notifications', { params: { merchant_id: merchantId } }),
+    markAsRead: (id) => api.patch(`/notifications/${id}/read`),
+    markAllAsRead: (merchantId) => api.patch('/notifications/read-all', { merchant_id: merchantId }),
+    deleteNotification: (id) => api.delete(`/notifications/${id}`),
 };
 
 // Reconciliation Service
@@ -91,8 +109,10 @@ export const reconciliationService = {
 export const noteService = {
     createCreditNote: (data) => api.post('/notes/credit', data),
     createDebitNote: (data) => api.post('/notes/debit', data),
-    getNotesForInvoice: (invoiceId) => api.get(`/notes/${invoiceId}`),
-    getAllNotes: (type) => api.get('/notes', { params: { type } }),
+    getNotesForInvoice: (invoiceId) => api.get(`/notes/invoice/${invoiceId}`),
+    getAllNotes: (merchant_id, type) => api.get('/notes', { params: { merchant_id, type } }),
+    getNoteDetail: (id) => api.get(`/notes/detail/${id}`),
+    deleteNote: (id) => api.delete(`/notes/${id}`),
 };
 
 // GST Return Service
@@ -119,8 +139,12 @@ export const gstAdapterService = {
 // Payment Service
 export const paymentService = {
     recordPayment: (data) => api.post('/payments', data), // Gateway: POST /api/payments -> Service: POST /payments
+    getPayments: (merchantId) => api.get('/payments', { params: { merchant_id: merchantId } }),
     getPaymentsForInvoice: (invoiceId) => api.get(`/payments/invoice/${invoiceId}`),
-    getAnalytics: () => api.get('/payments/analytics'),
+    confirmPayment: (id) => api.post(`/payments/${id}/confirm`),
+    getAnalytics: (merchantId) => api.get('/payments/analytics', { params: { merchant_id: merchantId } }),
 };
+
+
 
 export default api;

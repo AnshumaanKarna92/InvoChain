@@ -79,7 +79,18 @@ app.post('/inventory/adjust', async (req, res) => {
         }
 
         // Update Inventory
-        await client.query('UPDATE inventory SET quantity = $1, updated_at = NOW() WHERE merchant_id = $2 AND sku = $3', [newQty, merchant_id, sku]);
+        // When using SET, also reset reserved_quantity to 0 for clean state
+        if (type === 'SET') {
+            await client.query(
+                'UPDATE inventory SET quantity = $1, reserved_quantity = 0, name = $4, unit_price = $5, updated_at = NOW() WHERE merchant_id = $2 AND sku = $3',
+                [newQty, merchant_id, sku, name, unit_price]
+            );
+        } else {
+            await client.query(
+                'UPDATE inventory SET quantity = $1, name = $4, unit_price = $5, updated_at = NOW() WHERE merchant_id = $2 AND sku = $3',
+                [newQty, merchant_id, sku, name, unit_price]
+            );
+        }
 
         // Log Event
         await client.query(
@@ -105,6 +116,16 @@ app.post('/inventory/reserve', async (req, res) => {
     try {
         await client.query('BEGIN');
         const { merchant_id, items, invoice_id } = req.body; // items: [{ sku, quantity }]
+
+        // Idempotency Check
+        const existingEvent = await client.query(
+            'SELECT * FROM inventory_events WHERE invoice_id = $1 AND event_type = $2',
+            [invoice_id, 'RESERVE']
+        );
+        if (existingEvent.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.json({ success: true, message: 'Stock already reserved (Idempotent)' });
+        }
 
         for (const item of items) {
             const { sku, quantity } = item;
@@ -173,6 +194,16 @@ app.post('/inventory/commit', async (req, res) => {
         await client.query('BEGIN');
         const { merchant_id, items, invoice_id } = req.body;
 
+        // Idempotency Check
+        const existingEvent = await client.query(
+            'SELECT * FROM inventory_events WHERE invoice_id = $1 AND event_type = $2',
+            [invoice_id, 'COMMIT']
+        );
+        if (existingEvent.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.json({ success: true, message: 'Stock already committed (Idempotent)' });
+        }
+
         for (const item of items) {
             const { sku, quantity } = item;
 
@@ -216,6 +247,16 @@ app.post('/inventory/release', async (req, res) => {
     try {
         await client.query('BEGIN');
         const { merchant_id, items, invoice_id } = req.body;
+
+        // Idempotency Check
+        const existingEvent = await client.query(
+            'SELECT * FROM inventory_events WHERE invoice_id = $1 AND event_type = $2',
+            [invoice_id, 'RELEASE']
+        );
+        if (existingEvent.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.json({ success: true, message: 'Stock already released (Idempotent)' });
+        }
 
         for (const item of items) {
             const { sku, quantity } = item;

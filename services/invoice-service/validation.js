@@ -23,6 +23,7 @@ const createInvoiceSchema = z.object({
     }),
     total_amount: z.number().positive("Total amount must be positive"),
     tax_amount: z.number().nonnegative("Tax amount must be non-negative"),
+    place_of_supply: z.string().length(2, "Place of Supply must be 2 characters").optional(),
     items: z.string().transform((str, ctx) => {
         try {
             const parsed = JSON.parse(str);
@@ -59,10 +60,11 @@ const validateRequest = (schema) => (req, res, next) => {
         next();
     } catch (error) {
         if (error instanceof z.ZodError) {
+            console.log('Zod Error:', error);
             return res.status(400).json({
                 success: false,
                 message: 'Validation Error',
-                errors: error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+                errors: error.errors ? error.errors.map(e => ({ field: e.path.join('.'), message: e.message })) : [{ message: error.message }]
             });
         }
         next(error);

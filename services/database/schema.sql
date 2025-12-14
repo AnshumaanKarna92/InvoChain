@@ -125,3 +125,81 @@ CREATE TABLE invoice_hashes (
     block_number INTEGER,
     anchored_at TIMESTAMP WITH TIME ZONE
 );
+
+-- 9. GST Returns
+CREATE TABLE gst_returns (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id),
+    return_type VARCHAR(20) NOT NULL, -- 'GSTR1', 'GSTR3B'
+    period_month INTEGER NOT NULL,
+    period_year INTEGER NOT NULL,
+    gstin VARCHAR(15) NOT NULL,
+    return_data JSONB,
+    status VARCHAR(20) DEFAULT 'DRAFT',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10. Credit/Debit Notes
+CREATE TABLE notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    note_number VARCHAR(50) NOT NULL,
+    invoice_id UUID REFERENCES invoices(id),
+    merchant_id UUID REFERENCES merchants(id), -- Issuer
+    note_type VARCHAR(20) NOT NULL, -- 'CREDIT', 'DEBIT'
+    reason VARCHAR(255),
+    amount DECIMAL(15, 2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 11. Payments
+CREATE TABLE payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invoice_id UUID REFERENCES invoices(id),
+    merchant_id UUID REFERENCES merchants(id),
+    amount DECIMAL(15, 2) NOT NULL,
+    payment_method VARCHAR(50),
+    payment_reference VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'PENDING',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 12. Reconciliation Reports
+CREATE TABLE IF NOT EXISTS reconciliation_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id),
+    report_data JSONB,
+    status VARCHAR(20) DEFAULT 'COMPLETED',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 13. Discrepancies
+CREATE TABLE IF NOT EXISTS discrepancies (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id),
+    invoice_id UUID REFERENCES invoices(id),
+    discrepancy_type VARCHAR(50),
+    description TEXT,
+    status VARCHAR(20) DEFAULT 'OPEN',
+    resolved_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 14. Notifications
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    merchant_id UUID REFERENCES merchants(id) ON DELETE CASCADE,
+    invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL, -- 'INVOICE_RECEIVED', 'INVOICE_ACCEPTED', 'INVOICE_REJECTED', 'INVOICE_EDITED'
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_notifications_merchant ON notifications(merchant_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_invoices_seller ON invoices(seller_merchant_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_buyer ON invoices(buyer_gstin);
+CREATE INDEX IF NOT EXISTS idx_inventory_sku ON inventory(sku);

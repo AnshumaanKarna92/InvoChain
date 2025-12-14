@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../services/api';
-import { useDarkMode } from '../App';
+import { useDarkMode } from '../context/ThemeContext';
 
 export default function Register() {
     const { darkMode } = useDarkMode();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
-        businessName: '',
+        legalName: '',
+        tradeName: '',
         gstin: '',
         email: '',
         password: '',
@@ -86,15 +87,28 @@ export default function Register() {
                 <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
                     <div className="space-y-4">
                         <div>
-                            <label htmlFor="businessName" className={`block text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-slate-700'} mb-1`}>Business Name</label>
+                            <label htmlFor="legalName" className={`block text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-slate-700'} mb-1`}>Legal Name</label>
                             <input
-                                id="businessName"
-                                name="businessName"
+                                id="legalName"
+                                name="legalName"
                                 type="text"
                                 required
                                 className={`appearance-none block w-full px-3 py-2.5 border ${darkMode ? 'border-slate-700 bg-slate-800 text-white' : 'border-gray-300 text-gray-900'} rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all`}
-                                placeholder="e.g. Acme Corp"
-                                value={formData.businessName}
+                                placeholder="e.g. Acme Corp Private Limited"
+                                value={formData.legalName}
+                                onChange={handleChange}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="tradeName" className={`block text-sm font-medium ${darkMode ? 'text-slate-300' : 'text-slate-700'} mb-1`}>Trade Name</label>
+                            <input
+                                id="tradeName"
+                                name="tradeName"
+                                type="text"
+                                required
+                                className={`appearance-none block w-full px-3 py-2.5 border ${darkMode ? 'border-slate-700 bg-slate-800 text-white' : 'border-gray-300 text-gray-900'} rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all`}
+                                placeholder="e.g. Acme Solutions"
+                                value={formData.tradeName}
                                 onChange={handleChange}
                             />
                         </div>

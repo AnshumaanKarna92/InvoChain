@@ -26,54 +26,88 @@ app.post('/reconciliation/run', async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const { period_start, period_end } = req.body;
+        const { merchant_id, period_start, period_end } = req.body;
 
-        // Fetch all invoices for the period (Mocking "Issued" vs "Received" by just using the same table for now)
-        // In a real scenario, "Received" would come from GSTR-2A API or Buyer's upload.
-        // Here we simulate that "System Invoices" are "Issued" and we check if they are "Accepted" by buyer.
+        // Fetch invoices - if merchant_id provided, filter by it
+        let invoicesQuery = 'SELECT * FROM invoices';
+        let invoicesParams = [];
 
-        const invoicesRes = await client.query('SELECT * FROM invoices');
+        if (merchant_id) {
+            invoicesQuery = 'SELECT * FROM invoices WHERE seller_merchant_id = $1 OR buyer_merchant_id = $1';
+            invoicesParams = [merchant_id];
+        }
+
+        const invoicesRes = await client.query(invoicesQuery, invoicesParams);
         const invoices = invoicesRes.rows;
+
+        console.log(`[Reconciliation] Processing ${invoices.length} invoices`);
 
         const reportId = uuidv4();
         let matchedCount = 0;
         let discrepanciesCount = 0;
+        const discrepancyDetails = [];
 
         for (const invoice of invoices) {
-            // Logic: If status is ISSUED but not ACCEPTED after due date, flag it?
-            // Or simple check: Does every invoice have a valid buyer?
-
+            // Logic: Flag invoices with issues
             if (!invoice.buyer_gstin) {
-                await client.query(
-                    'INSERT INTO discrepancies (id, report_id, invoice_id, invoice_number, type, details, status) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-                    [uuidv4(), reportId, invoice.id, invoice.invoice_number, 'MISSING_BUYER', 'Buyer GSTIN missing', 'OPEN']
+                // Only create discrepancy if it doesn't already exist for this invoice
+                const existingDisc = await client.query(
+                    'SELECT id FROM discrepancies WHERE invoice_id = $1 AND type = $2 AND status = $3',
+                    [invoice.id, 'MISSING_BUYER', 'OPEN']
                 );
-                discrepanciesCount++;
+
+                if (existingDisc.rows.length === 0) {
+                    await client.query(
+                        'INSERT INTO discrepancies (id, merchant_id, invoice_id, type, details, status) VALUES ($1, $2, $3, $4, $5, $6)',
+                        [uuidv4(), invoice.seller_merchant_id, invoice.id, 'MISSING_BUYER', 'Buyer GSTIN missing', 'OPEN']
+                    );
+                    discrepanciesCount++;
+                    discrepancyDetails.push({ invoice_id: invoice.id, type: 'MISSING_BUYER' });
+                }
             } else if (invoice.status === 'REJECTED') {
-                await client.query(
-                    'INSERT INTO discrepancies (id, report_id, invoice_id, invoice_number, type, details, status) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-                    [uuidv4(), reportId, invoice.id, invoice.invoice_number, 'REJECTED_INVOICE', 'Invoice rejected by buyer', 'OPEN']
+                const existingDisc = await client.query(
+                    'SELECT id FROM discrepancies WHERE invoice_id = $1 AND type = $2 AND status = $3',
+                    [invoice.id, 'REJECTED_INVOICE', 'OPEN']
                 );
-                discrepanciesCount++;
+
+                if (existingDisc.rows.length === 0) {
+                    await client.query(
+                        'INSERT INTO discrepancies (id, merchant_id, invoice_id, type, details, status) VALUES ($1, $2, $3, $4, $5, $6)',
+                        [uuidv4(), invoice.seller_merchant_id, invoice.id, 'REJECTED_INVOICE', 'Invoice rejected by buyer', 'OPEN']
+                    );
+                    discrepanciesCount++;
+                    discrepancyDetails.push({ invoice_id: invoice.id, type: 'REJECTED_INVOICE' });
+                }
             } else {
                 matchedCount++;
             }
         }
 
+        // Create reconciliation report using JSONB report_data
+        const reportData = {
+            period_start: period_start || null,
+            period_end: period_end || null,
+            total_invoices: invoices.length,
+            matched_invoices: matchedCount,
+            discrepancies_count: discrepanciesCount,
+            discrepancy_details: discrepancyDetails,
+            completed_at: new Date().toISOString()
+        };
+
         await client.query(
-            'INSERT INTO reconciliation_reports (id, period_start, period_end, total_invoices, matched_invoices, discrepancies_count, status) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-            [reportId, period_start || null, period_end || null, invoices.length, matchedCount, discrepanciesCount, 'COMPLETED']
+            'INSERT INTO reconciliation_reports (id, merchant_id, report_data, status) VALUES ($1, $2, $3, $4)',
+            [reportId, merchant_id || null, JSON.stringify(reportData), 'COMPLETED']
         );
 
         await client.query('COMMIT');
 
         const report = {
             id: reportId,
-            total_invoices: invoices.length,
-            matched_invoices: matchedCount,
-            discrepancies_count: discrepanciesCount,
+            ...reportData,
             status: 'COMPLETED'
         };
+
+        console.log(`[Reconciliation] Completed - Total: ${invoices.length}, Matched: ${matchedCount}, Discrepancies: ${discrepanciesCount}`);
 
         res.json({
             success: true,

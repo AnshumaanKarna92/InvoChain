@@ -76,106 +76,99 @@ app.use('/api/invoices', createProxyMiddleware({
     }
 }));
 
-// Merchant Service
-// /api/merchants -> http://localhost:3012/merchants
+// Notifications Service
+// /api/notifications -> http://localhost:3005/notifications
+app.use('/api/notifications', createProxyMiddleware({
+    target: SERVICES.notification,
+    changeOrigin: true,
+    pathRewrite: (path, req) => {
+        // When mounted at /api/notifications, path is relative:
+        // / -> /notifications
+        // /123 -> /notifications/123
+        // /123/read -> /notifications/123/read
+        // /read-all -> /notifications/read-all
+        const newPath = '/notifications' + path;
+        console.log(`[PathRewrite] ${path} -> ${newPath}`);
+        return newPath;
+    },
+    onProxyReq: (proxyReq, req, res) => {
+        console.log(`[Proxy] ${req.method} ${req.originalUrl} -> ${SERVICES.notification}${proxyReq.path}`);
+    },
+    onError: (err, req, res) => {
+        console.error(`[Proxy Error] Notification: ${req.method} ${req.url}:`, err.message);
+        res.status(502).json({ success: false, error: 'Notification service unavailable' });
+    }
+}));
+
 // Merchant Service
 // /api/merchants -> http://localhost:3012/merchants
 app.use('/api/merchants', createProxyMiddleware({
     target: SERVICES.merchant,
     changeOrigin: true,
-    pathRewrite: {
-        '^/$': '/merchants',
-        '^/(.+)': '/merchants/$1'
-    }
+    pathRewrite: (path) => '/merchants' + path
 }));
 
-// Inventory Service
-// /api/inventory -> http://localhost:3013/inventory
 // Inventory Service
 // /api/inventory -> http://localhost:3013/inventory
 app.use('/api/inventory', createProxyMiddleware({
     target: SERVICES.inventory,
     changeOrigin: true,
-    pathRewrite: {
-        '^/$': '/inventory',
-        '^/(.+)': '/inventory/$1'
+    pathRewrite: (path, req) => {
+        // When mounted at /api/inventory, path is relative:
+        // / -> /inventory
+        // /123 -> /inventory/123
+        // /adjust -> /inventory/adjust
+        const newPath = '/inventory' + path;
+        console.log(`[PathRewrite Inventory] ${path} -> ${newPath}`);
+        return newPath;
+    },
+    onProxyReq: (proxyReq, req, res) => {
+        console.log(`[Proxy] ${req.method} ${req.originalUrl} -> ${SERVICES.inventory}${proxyReq.path}`);
+    },
+    onError: (err, req, res) => {
+        console.error(`[Proxy Error] Inventory: ${req.method} ${req.url}:`, err.message);
+        res.status(502).json({ success: false, error: 'Inventory service unavailable' });
     }
 }));
 
 // Audit Service
 // /api/audit -> http://localhost:3014/audit
-// /api/audit -> http://localhost:3014/audit
 app.use('/api/audit', createProxyMiddleware({
     target: SERVICES.audit,
     changeOrigin: true,
-    pathRewrite: {
-        '^/$': '/audit',
-        '^/(.+)': '/audit/$1'
-    }
+    pathRewrite: (path) => '/audit' + path
 }));
 
-// Blockchain Service
-// /api/blockchain -> http://localhost:3003/blockchain
 // Blockchain Service
 // /api/blockchain -> http://localhost:3003/blockchain
 app.use('/api/blockchain', createProxyMiddleware({
     target: SERVICES.blockchain,
     changeOrigin: true,
-    pathRewrite: {
-        '^/$': '/blockchain',
-        '^/(.+)': '/blockchain/$1'
-    }
+    pathRewrite: (path) => '/blockchain' + path
 }));
 
-// Notification Service
-// /api/notifications -> http://localhost:3005/notifications
-// /api/notifications -> http://localhost:3005/notifications
-app.use('/api/notifications', createProxyMiddleware({
-    target: SERVICES.notification,
-    changeOrigin: true,
-    pathRewrite: {
-        '^/$': '/notifications',
-        '^/(.+)': '/notifications/$1'
-    }
-}));
-
-// Payment Service
-// /api/payments -> http://localhost:3010/payments
 // Payment Service
 // /api/payments -> http://localhost:3010/payments
 app.use('/api/payments', createProxyMiddleware({
     target: SERVICES.payment,
     changeOrigin: true,
-    pathRewrite: {
-        '^/$': '/payments',
-        '^/(.+)': '/payments/$1'
-    }
+    pathRewrite: (path) => '/payments' + path
 }));
 
-// Buyer Action Service
-// /api/buyer -> http://localhost:3004/buyer
 // Buyer Action Service
 // /api/buyer -> http://localhost:3004/buyer
 app.use('/api/buyer', createProxyMiddleware({
     target: SERVICES.buyer,
     changeOrigin: true,
-    pathRewrite: {
-        '^/$': '/buyer',
-        '^/(.+)': '/buyer/$1'
-    }
+    pathRewrite: (path) => '/buyer' + path
 }));
 
-// GST Return Service
-// /api/gst -> http://localhost:3008/gst
 // GST Return Service
 // /api/gst -> http://localhost:3008/gst
 app.use('/api/gst', createProxyMiddleware({
     target: SERVICES.gstReturn,
     changeOrigin: true,
-    pathRewrite: {
-        '^/$': '/gst',
-        '^/(.+)': '/gst/$1'
-    }
+    pathRewrite: (path) => '/gst' + path
 }));
 
 // GST Adapter Service
@@ -183,35 +176,23 @@ app.use('/api/gst', createProxyMiddleware({
 app.use('/api/gst-adapter', createProxyMiddleware({
     target: SERVICES.gstAdapter,
     changeOrigin: true,
-    pathRewrite: {
-        '^/api/gst-adapter': '', // Strip prefix
-    }
+    pathRewrite: (path) => path // No prefix change needed, target root
 }));
 
-// Reconciliation Service
-// /api/reconciliation -> http://localhost:3006/reconciliation
 // Reconciliation Service
 // /api/reconciliation -> http://localhost:3006/reconciliation
 app.use('/api/reconciliation', createProxyMiddleware({
     target: SERVICES.reconciliation,
     changeOrigin: true,
-    pathRewrite: {
-        '^/$': '/reconciliation',
-        '^/(.+)': '/reconciliation/$1'
-    }
+    pathRewrite: (path) => '/reconciliation' + path
 }));
 
-// Credit/Debit Note Service
-// /api/notes -> http://localhost:3007/notes
 // Credit/Debit Note Service
 // /api/notes -> http://localhost:3007/notes
 app.use('/api/notes', createProxyMiddleware({
     target: SERVICES.notes,
     changeOrigin: true,
-    pathRewrite: {
-        '^/$': '/notes',
-        '^/(.+)': '/notes/$1'
-    }
+    pathRewrite: (path) => '/notes' + path
 }));
 
 // Global proxy error handler

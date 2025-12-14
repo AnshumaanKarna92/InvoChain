@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../services/api';
-import { useDarkMode, useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
+import { useDarkMode } from '../context/ThemeContext';
 
 export default function Login() {
     const { darkMode } = useDarkMode();

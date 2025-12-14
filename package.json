@@ -7,7 +7,9 @@
         "install:all": "npm install && npm install --prefix apps/web && npm install --prefix services/api-gateway && npm install --prefix services/auth-service && npm install --prefix services/blockchain-service && npm install --prefix services/invoice-service && npm install --prefix services/payment-service && npm install --prefix services/reconciliation-service && npm install --prefix services/credit-debit-note-service && npm install --prefix services/gst-return-service && npm install --prefix services/gst-adapter-service && npm install --prefix services/buyer-action-service && npm install --prefix services/notification-service && npm install --prefix services/merchant-registry-service && npm install --prefix services/inventory-service && npm install --prefix services/audit-service"
     },
     "devDependencies": {
-        "concurrently": "^9.1.0"
+        "axios": "^1.13.2",
+        "concurrently": "^9.1.0",
+        "form-data": "^4.0.5"
     },
     "dependencies": {
         "bcryptjs": "^3.0.3",

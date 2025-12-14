@@ -1,36 +1,56 @@
 import { useState, useEffect } from 'react';
 import { reconciliationService } from '../services/api';
-import { useDarkMode } from '../App';
+import { useDarkMode } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 export default function Reconciliation() {
     const { darkMode } = useDarkMode();
+    const { user } = useAuth();
+    const toast = useToast();
     const [discrepancies, setDiscrepancies] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [fetchingDiscrepancies, setFetchingDiscrepancies] = useState(true);
     const [lastRun, setLastRun] = useState(null);
+    const [lastReport, setLastReport] = useState(null);
 
     useEffect(() => {
         fetchDiscrepancies();
     }, []);
 
     const fetchDiscrepancies = async () => {
+        setFetchingDiscrepancies(true);
         try {
             const response = await reconciliationService.getDiscrepancies();
             setDiscrepancies(response.data.discrepancies || []);
         } catch (error) {
             console.error('Error fetching discrepancies:', error);
+            toast.error('Failed to fetch discrepancies');
+        } finally {
+            setFetchingDiscrepancies(false);
         }
     };
 
     const handleRunReconciliation = async () => {
         setLoading(true);
         try {
-            const response = await reconciliationService.runReconciliation({});
+            console.log('[Reconciliation] Running for merchant:', user?.merchant_id);
+            const response = await reconciliationService.runReconciliation({
+                merchant_id: user?.merchant_id
+            });
+            console.log('[Reconciliation] Response:', response.data);
+
             setLastRun(new Date().toLocaleString());
-            alert(`Reconciliation complete! Found ${response.data.discrepancies?.length || 0} discrepancies.`);
-            fetchDiscrepancies();
+            setLastReport(response.data.report);
+
+            const report = response.data.report;
+            toast.success(`Reconciliation completed! Total: ${report.total_invoices}, Matched: ${report.matched_invoices}, Discrepancies: ${report.discrepancies_count}`);
+
+            await fetchDiscrepancies();
         } catch (error) {
             console.error('Error running reconciliation:', error);
-            alert('Failed to run reconciliation');
+            const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
+            toast.error('Failed to run reconciliation: ' + errorMsg);
         } finally {
             setLoading(false);
         }
@@ -39,11 +59,11 @@ export default function Reconciliation() {
     const handleResolve = async (id) => {
         try {
             await reconciliationService.resolveDiscrepancy(id);
-            alert('Discrepancy resolved!');
+            toast.success('Discrepancy resolved!');
             fetchDiscrepancies();
         } catch (error) {
             console.error('Error resolving discrepancy:', error);
-            alert('Failed to resolve discrepancy');
+            toast.error('Failed to resolve discrepancy');
         }
     };
 
@@ -51,24 +71,60 @@ export default function Reconciliation() {
         <div className="px-4 py-6 sm:px-0">
             <div className="flex justify-between items-center mb-6">
                 <div>
-                    <h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>Reconciliation</h1>
-                    {lastRun && <p className={`text-sm mt-1 ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>Last run: {lastRun}</p>}
+                    {lastRun && <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>Last run: {lastRun}</p>}
                 </div>
                 <button
                     onClick={handleRunReconciliation}
                     disabled={loading}
-                    className="bg-indigo-600 px-4 py-2 rounded-md text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${loading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                        }`}
                 >
-                    {loading ? 'Running...' : 'Run Reconciliation'}
+                    {loading ? (
+                        <span className="flex items-center">
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Running...
+                        </span>
+                    ) : 'Run Reconciliation'}
                 </button>
             </div>
 
-            <div className={`${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} shadow overflow-hidden sm:rounded-lg border`}>
-                <div className="px-4 py-5 sm:px-6">
-                    <h2 className={`text-lg font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Discrepancies</h2>
+            {/* Report Summary */}
+            {lastReport && (
+                <div className={`mb-6 p-4 rounded-xl ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} border shadow-sm`}>
+                    <h3 className={`text-sm font-semibold mb-3 ${darkMode ? 'text-white' : 'text-slate-700'}`}>Last Reconciliation Summary</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className={`p-3 rounded-lg ${darkMode ? 'bg-slate-700' : 'bg-blue-50'}`}>
+                            <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-blue-600'}`}>Total Invoices</p>
+                            <p className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-blue-700'}`}>{lastReport.total_invoices}</p>
+                        </div>
+                        <div className={`p-3 rounded-lg ${darkMode ? 'bg-slate-700' : 'bg-emerald-50'}`}>
+                            <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-emerald-600'}`}>Matched</p>
+                            <p className={`text-xl font-bold ${darkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>{lastReport.matched_invoices}</p>
+                        </div>
+                        <div className={`p-3 rounded-lg ${darkMode ? 'bg-slate-700' : 'bg-red-50'}`}>
+                            <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-red-600'}`}>Discrepancies</p>
+                            <p className={`text-xl font-bold ${darkMode ? 'text-red-400' : 'text-red-700'}`}>{lastReport.discrepancies_count}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className={`${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} shadow overflow-hidden rounded-xl border`}>
+                <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
+                    <h2 className={`text-lg font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Open Discrepancies</h2>
+                    <span className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>{discrepancies.length} items</span>
                 </div>
                 <div className={`border-t ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}>
-                    {discrepancies.length === 0 ? (
+                    {fetchingDiscrepancies ? (
+                        <div className="px-4 py-8 text-center">
+                            <div className={`animate-spin inline-block w-8 h-8 border-2 border-current border-t-transparent rounded-full ${darkMode ? 'text-blue-500' : 'text-indigo-600'}`}></div>
+                        </div>
+                    ) : discrepancies.length === 0 ? (
                         <div className={`px-4 py-5 sm:p-6 text-center ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>
                             No discrepancies found. All invoices match!
                         </div>
